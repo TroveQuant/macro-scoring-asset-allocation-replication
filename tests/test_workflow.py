@@ -26,3 +26,20 @@ def test_workflow_is_manual_only_and_runs_complete_opt_in_backtest() -> None:
     assert "replicate:" in text
     assert "if: ${{ inputs.run_replication }}" in text
     assert "needs: validate" in text
+
+
+def test_tests_workflow_runs_offline_suite_on_pull_requests_only() -> None:
+    import yaml
+
+    text = (ROOT / ".github/workflows/tests.yml").read_text(encoding="utf-8")
+    workflow = yaml.safe_load(text)
+    triggers = workflow.get("on", workflow.get(True))  # PyYAML parses a bare `on` key as True
+    assert set(triggers) == {"pull_request", "workflow_dispatch"}
+    assert workflow["permissions"] == {"contents": "read"}
+    steps = workflow["jobs"]["offline-tests"]["steps"]
+    commands = "\n".join(step.get("run", "") for step in steps)
+    assert "python -m pytest -q" in commands
+    assert "run_replication.py --config config/base.yml --validate-config" in commands
+    assert "secrets." not in text
+    assert "git push" not in text and "git commit" not in text and "git add" not in text
+    assert "contents: write" not in text
