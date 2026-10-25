@@ -13,7 +13,7 @@ run_replication.py
   → 月末对齐及因果滚动去极值/标准化
   → 国内、全球、风险、美元与 AR 信号
   → 原方向权重汇总为资产仓位
-  → 原组合权重 × 仓位
+  → 原组合权重 × 仓位（默认 allow_short=true 保留负仓位即做空；false 为仅做多）
   → 信号后一期执行、显式 BIL 现金、10bp 换手成本
   → 同资产固定权重 benchmark
   → 指标、图表、JSON/HTML/Markdown 报告
@@ -49,19 +49,35 @@ python -m venv .venv
 .venv\Scripts\python.exe -m pip check
 .venv\Scripts\python.exe run_replication.py --config config/base.yml
 .venv\Scripts\python.exe tools/validate_backtest.py
+.venv\Scripts\python.exe tools/summarize_exposure.py
 ```
+
+`tools/summarize_exposure.py` 只读取 `outputs/allocation_weights.csv`，打印平均净/总/多头/空头敞口和平均现金，不下载数据、不改写输出。
 
 当前配置固定数据截止日为 2026-08-31，以确保本地与 Actions 得到相同月份范围。上游请求失败、数据陈旧、键不一致、重复日期、缺失收益或非有限结果都会返回非零退出码，且不会采用随机/演示/合成回退。
 
 ## 当前真实回测
 
-当前提交内结果来自本次真实下载与重算，区间 2018-01-31 至 2026-08-31，共 104 个月。主要指标以 `outputs/performance_metrics.csv` 和自包含的 `outputs/report.html` 为准。测试 fixture 只存在于 `tests/fixtures`；测试通过不代表原模型严格复现成功。
+> **注意：以下结果由修复前的代码生成，待在可访问数据源（Yahoo）的环境中通过正式入口重跑。** 本次改动新增 `project.allow_short` 开关和敞口指标；默认 `allow_short: true` 不改变收益计算逻辑，但现有 `outputs/performance_metrics.csv`、`report.json`、`report.html`、`backtest_report.md` 尚不包含敞口指标（`average_*_exposure`、`average_cash_weight`）和报告中的做空/可比性说明。下文敞口数字由已提交的 `outputs/allocation_weights.csv` 离线计算。
+
+当前提交内结果来自本次真实下载与重算，区间 2018-01-31 至 2026-08-31，共 104 个月。主要指标以 `outputs/performance_metrics.csv` 和自包含的 `outputs/report.html` 为准。测试 fixture 只存在于 `tests/` 下（`tests/fixtures` 及离线流水线测试中生成的确定性价格，仅写入 pytest 临时目录），生产入口不会读取；测试通过不代表原模型严格复现成功。
 
 生成文件包括绩效、月收益、净值、权重、宏观得分、调仓记录、输入 manifest、三张图和三种报告格式，均在 `outputs/`。
 
+## 仓位、敞口与 benchmark 可比性
+
+- 资产仓位范围为 [-1,1]，乘以原固定组合权重得到执行权重。默认 `project.allow_short: true`（与此前实现一致）时，负仓位即做空该资产，例如 2018-01 黄金为 -30%。空头名义金额占用等额现金预算，卖空所得不计息，也未计融券费用。
+- 现金权重 `CASH = 1 - 风险资产权重绝对值之和`，由 BIL 代理。
+- 按已提交的 `outputs/allocation_weights.csv`（2018-01 至 2026-08，104 个月）计算：平均净风险敞口 1.5%，平均总敞口 43.5%（多头 22.5%、空头 21.0%），平均现金 56.5%；约 99% 的月份至少持有一个空头。复核命令：`python tools/summarize_exposure.py`。
+- benchmark 是同六类资产按原权重 100% 满仓的多头组合（净敞口 100%，无现金）。策略平均净敞口接近 0，因此两者风险敞口不可比：策略相对 benchmark 的超额收益同时包含敞口差异（含现金拖累）和择时贡献，不能直接解读为宏观择时 alpha。比较时应同时参考敞口指标、波动率和夏普比率。
+- `project.allow_short: false` 为仅做多对照：负仓位截断为 0，对应预算留在现金。原研究是否本意为仅做多尚待所有者确认，因此默认值未改。
+- 新运行会把 `average_net_exposure`、`average_gross_exposure`、`average_long_exposure`、`average_short_exposure`、`average_cash_weight` 写入 `performance_metrics.csv` 和三种报告；报告“方法与限制”会披露做空处理和上述可比性说明，`tools/validate_backtest.py` 会用权重文件独立复算这些指标。
+
 ## GitHub Actions
 
-工作流 `Macro allocation replication` 仅支持 `workflow_dispatch`。选择 `run_replication=true` 后会安装固定依赖、运行结构及敏感信息检查和 pytest、删除批准的旧输出、下载真实数据、执行正式入口、复算 12 项回测不变量、验证报告、上传完整 Artifact，并只显式提交批准的输出；不使用 `continue-on-error`、schedule、Pages、邮件、虚构 Secret 或 `git add --all`。
+工作流 `Macro allocation replication` 仅支持 `workflow_dispatch`。选择 `run_replication=true` 后会安装固定依赖、运行结构及敏感信息检查和 pytest、删除批准的旧输出、下载真实数据、执行正式入口、复算 12 项回测不变量（并核对仅做多约束与敞口指标）、验证报告、上传完整 Artifact，并只显式提交批准的输出；不使用 `continue-on-error`、schedule、Pages、邮件、虚构 Secret 或 `git add --all`。
+
+另有 `Tests` 工作流（`.github/workflows/tests.yml`），只在 pull request 和手动触发时运行：安装固定依赖、`pip check`、配置校验、全部离线 pytest 和上传白名单扫描。它只有 `contents: read` 权限，不下载行情、不使用 Secret、不提交任何文件。
 
 ## 复现限制与许可
 
