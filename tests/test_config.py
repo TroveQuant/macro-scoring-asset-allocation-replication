@@ -47,3 +47,24 @@ def test_artificial_provider_is_rejected(marker: str) -> None:
     unsafe = deepcopy(config)
     unsafe["data"]["provider"] = f"{marker}_prices"
     assert validate_structure(unsafe)
+
+
+def test_allow_short_defaults_to_original_behaviour_and_must_be_boolean() -> None:
+    from macro_allocation.config import allow_short
+    from macro_allocation.errors import ConfigurationError
+
+    config = load_config(ROOT / "config/base.yml")
+    assert config["project"]["allow_short"] is True
+    legacy = deepcopy(config)
+    del legacy["project"]["allow_short"]
+    assert validate_structure(legacy) == []
+    assert allow_short(legacy) is True
+    long_only = deepcopy(config)
+    long_only["project"]["allow_short"] = False
+    assert validate_structure(long_only) == []
+    assert allow_short(long_only) is False
+    unsafe = deepcopy(config)
+    unsafe["project"]["allow_short"] = "false"
+    assert any("allow_short" in error for error in validate_structure(unsafe))
+    with pytest.raises(ConfigurationError):
+        allow_short(unsafe)

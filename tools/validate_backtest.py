@@ -46,6 +46,17 @@ def main() -> int:
     if not monthly.index.equals(nav.index) or not monthly.index.equals(weights.index) or not monthly.index.equals(assets.index): return fail("strategy and benchmark dates are not aligned")
     if monthly.index.max()>pd.Timestamp(cfg["data"]["as_of_date"]): return fail("latest result uses future return")
     if manifest.get("raw_redistribution") is not False or not manifest.get("inputs"): return fail("input manifest is incomplete")
-    print("Backtest validation passed: 12 invariants checked, including timing, costs, compounding and finite outputs.")
+    risky=weights.drop(columns="CASH"); long_only=cfg["project"].get("allow_short",True) is False
+    if long_only and (risky<-1e-12).any().any(): return fail("long-only configuration produced short weights")
+    exposure={"average_net_exposure":risky.sum(axis=1).mean(),"average_gross_exposure":risky.abs().sum(axis=1).mean(),
+              "average_long_exposure":risky.clip(lower=0).sum(axis=1).mean(),"average_short_exposure":(-risky.clip(upper=0)).sum(axis=1).mean(),
+              "average_cash_weight":weights.CASH.mean()}
+    present=[k for k in exposure if k in metrics.index]
+    if present and len(present)!=len(exposure): return fail("exposure metrics are incomplete")
+    if present and not all(np.isclose(float(metrics[k]),float(v),atol=1e-12) for k,v in exposure.items()): return fail("exposure metrics cannot be independently reproduced")
+    if not present: print("WARNING: performance_metrics.csv has no exposure metrics (outputs predate exposure reporting); rerun the official entry point.",file=sys.stderr)
+    extra=(["long-only weights"] if long_only else [])+(["exposure metrics"] if present else [])
+    print("Backtest validation passed: 12 invariants checked, including timing, costs, compounding and finite outputs"
+          +(f"; also checked: {', '.join(extra)}." if extra else ".")+("" if present else " Exposure metrics absent."))
     return 0
 if __name__=="__main__": raise SystemExit(main())

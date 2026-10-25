@@ -55,6 +55,8 @@ def validate_structure(config: dict[str, Any]) -> list[str]:
         errors.append("signal_lag_months must equal one")
     if float(project.get("transaction_cost_bps", -1)) < 0:
         errors.append("transaction_cost_bps must be non-negative")
+    if "allow_short" in project and not isinstance(project["allow_short"], bool):
+        errors.append("project.allow_short must be true (keep short positions) or false (long-only)")
     if data.get("provider") != "yahoo_chart_runtime":
         errors.append("only the declared yahoo_chart_runtime provider is allowed")
     provider_text = " ".join(str(value).lower() for value in data.values())
@@ -104,6 +106,14 @@ def validate_structure(config: dict[str, Any]) -> list[str]:
         if _unsafe_relative_path(str(item)):
             errors.append(f"approved output is not repository-relative: {item.as_posix()}")
     return errors
+
+
+def allow_short(config: dict[str, Any]) -> bool:
+    """Return ``project.allow_short``; a missing key keeps the original long/short behaviour."""
+    value = config["project"].get("allow_short", True)
+    if not isinstance(value, bool):
+        raise ConfigurationError("project.allow_short must be a boolean")
+    return value
 
 
 def require_valid_config(config: dict[str, Any]) -> None:

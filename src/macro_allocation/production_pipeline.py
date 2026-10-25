@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 import pandas as pd
+from .config import allow_short
 from .portfolio import build_asset_positions
 from .practical_factors import build_asset_returns, build_macro_scores, monthly_prices
 from .production_backtest import run_backtest
@@ -20,9 +21,10 @@ def run_pipeline(config: dict[str,Any], project_root: Path, config_path: Path) -
     signal_columns=[c for c in scores if c.endswith("_signal")]
     positions=build_asset_positions(scores[signal_columns],config["factor_weights"])
     asset_returns,cash_returns=build_asset_returns(prices,config)
-    result=run_backtest(positions,asset_returns,cash_returns,config["portfolio_weights"],float(config["project"]["transaction_cost_bps"]),config["project"]["sample_start"],market.daily,{a:s["symbol"] for a,s in config["assets"].items()})
+    shorts=allow_short(config)
+    result=run_backtest(positions,asset_returns,cash_returns,config["portfolio_weights"],float(config["project"]["transaction_cost_bps"]),config["project"]["sample_start"],market.daily,{a:s["symbol"] for a,s in config["assets"].items()},allow_short=shorts)
     nav=build_nav(result.monthly)
-    metrics=compute_metrics(result.monthly,config["data"]["as_of_date"],float(config["project"]["risk_free_rate"]))
+    metrics=compute_metrics(result.monthly,config["data"]["as_of_date"],float(config["project"]["risk_free_rate"]),allocations=result.allocations)
     output_dir=project_root/config["outputs"]["directory"]; approved=set(config["outputs"]["approved_files"])
     output_dir.mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".macro-run-",dir=output_dir) as name:
@@ -38,7 +40,7 @@ def run_pipeline(config: dict[str,Any], project_root: Path, config_path: Path) -
         manifest={"generated_at":datetime.now(timezone.utc).isoformat(),"provider":config["data"]["provider"],"raw_redistribution":False,"inputs":market.manifest}
         (temp/"input_manifest.json").write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding="utf-8")
         figures=save_figures(nav,result.allocations,temp/"figures")
-        run={"status":"adapted","mode":config["project"]["mode"],"sample":f"{metrics['backtest_start']} to {metrics['backtest_end']}","generated_at":manifest["generated_at"],"commit_sha":git_sha(project_root),"command":f"python run_replication.py --config {config_path.as_posix()}","config":config_path.as_posix()}
+        run={"status":"adapted","mode":config["project"]["mode"],"sample":f"{metrics['backtest_start']} to {metrics['backtest_end']}","generated_at":manifest["generated_at"],"commit_sha":git_sha(project_root),"command":f"python run_replication.py --config {config_path.as_posix()}","config":config_path.as_posix(),"allow_short":shorts}
         assets=[{"asset":a,"symbol":str(s["symbol"]),"role":str(s["role"])} for a,s in config["assets"].items()]
         payload=build_payload(metrics,run,assets,market.manifest)
         write_report(payload,figures,temp/"report.json",temp/"report.html"); write_markdown(payload,temp/"backtest_report.md")

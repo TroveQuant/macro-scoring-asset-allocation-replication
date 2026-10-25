@@ -9,6 +9,11 @@ project:
   transaction_cost_bps: 10.0
   risk_free_rate: 0.0
   max_gross_exposure: 1.0
+  # true（默认，与此前实现一致）：资产仓位 ∈ [-1,1]，负仓位即做空该资产；
+  #   空头名义金额占用等额现金预算，卖空所得不计息，未计融券费用。
+  # false：仅做多，负仓位截断为 0，对应预算留在 BIL 现金。
+  # 无论哪种设置，CASH = 1 - 风险资产权重绝对值之和；benchmark 始终 100% 满仓。
+  allow_short: true
   benchmark: static_same_asset_mix
 
 data:
