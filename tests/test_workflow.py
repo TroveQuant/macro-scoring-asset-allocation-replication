@@ -20,7 +20,7 @@ def test_workflow_is_manual_only_and_runs_complete_opt_in_backtest() -> None:
     assert "git add -- outputs/report.json" in text
     assert "continue-on-error" not in text
     assert "tools/clean_outputs.py" in text
-    assert "tools/validate_backtest.py" in text
+    assert "tools/validate_backtest.py --require-current-run" in text
     assert "outputs/performance_metrics.csv" in text
     assert "contents: write" in text
     assert "replicate:" in text

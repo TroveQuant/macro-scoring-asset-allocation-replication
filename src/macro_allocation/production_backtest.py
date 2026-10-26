@@ -1,11 +1,12 @@
 """Strict one-period-lag backtest with explicit cash and transaction costs.
 
 Asset positions lie in [-1, 1] and are multiplied by the non-negative base
-weights.  With ``allow_short=True`` (the original behaviour) a negative position
-is a short of that asset: its notional uses the same amount of the cash budget,
-short proceeds earn nothing and no borrow fee is charged.  With
-``allow_short=False`` negative positions are clipped to zero (long-only) and the
-unused budget stays in the explicit cash proxy.  In both cases
+weights.  The original research is long-only, so the default
+``allow_short=False`` clips negative positions to zero and the unused budget
+stays in the explicit cash proxy.  ``allow_short=True`` keeps the original
+long/short implementation for comparison only: a negative position is a short
+of that asset, its notional uses the same amount of the cash budget, short
+proceeds earn nothing and no borrow fee is charged.  In both cases
 ``CASH = 1 - sum(|risky weight|)``.
 """
 from __future__ import annotations
@@ -25,7 +26,7 @@ def run_backtest(positions: pd.DataFrame, asset_returns: pd.DataFrame,
                  transaction_cost_bps: float, sample_start: str,
                  daily_prices: dict[str, pd.Series] | None = None,
                  asset_symbols: dict[str, str] | None = None,
-                 allow_short: bool = True) -> BacktestResult:
+                 allow_short: bool = False) -> BacktestResult:
     keys = set(base_weights)
     if set(positions) != keys or set(asset_returns) != keys:
         raise DataValidationError("asset positions, returns and base-weight keys must match exactly")

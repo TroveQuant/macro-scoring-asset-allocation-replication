@@ -50,3 +50,87 @@ def test_pipeline_writes_exposure_metrics_and_honours_allow_short(tmp_path, monk
     assert payload["run"]["allow_short"] is allow_short
     assert "average_cash_weight" in payload["metrics"]
     assert any("100% 满仓" in note for note in payload["limitations"])
+
+
+def load_validator():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("validate_backtest_tool", ROOT / "tools/validate_backtest.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def run_fixture_pipeline(tmp_path, monkeypatch, config):
+    monkeypatch.setattr(production_pipeline, "download_market_data", lambda cfg, root: fixture_market(cfg))
+    production_pipeline.run_pipeline(config, tmp_path, Path("config/base.yml"))
+    return tmp_path / "outputs"
+
+
+def write_config(path, config, allow_short):
+    import yaml
+
+    edited = deepcopy(config)
+    edited["project"]["allow_short"] = allow_short
+    path.write_text(yaml.safe_dump(edited, allow_unicode=True), encoding="utf-8")
+    return path
+
+
+def test_default_config_is_long_only_and_passes_strict_validation(tmp_path, monkeypatch):
+    config = load_config(ROOT / "config/base.yml")
+    out = run_fixture_pipeline(tmp_path, monkeypatch, deepcopy(config))
+    weights = pd.read_csv(out / "allocation_weights.csv", parse_dates=["date"]).set_index("date")
+    assert (weights.drop(columns="CASH") >= 0).all().all()
+    metrics = pd.read_csv(out / "performance_metrics.csv").iloc[0]
+    assert metrics.average_short_exposure == 0
+    assert np.isclose(metrics.average_net_exposure, metrics.average_gross_exposure, atol=1e-12)
+    payload = json.loads((out / "report.json").read_text(encoding="utf-8"))
+    assert payload["run"]["allow_short"] is False
+    validator = load_validator()
+    cfg_path = write_config(tmp_path / "base.yml", config, False)
+    assert validator.main(["--outputs", str(out), "--config", str(cfg_path), "--require-current-run"]) == 0
+
+
+def test_validator_follows_the_run_setting_and_strict_mode(tmp_path, monkeypatch, capsys):
+    config = load_config(ROOT / "config/base.yml")
+    comparison = deepcopy(config)
+    comparison["project"]["allow_short"] = True
+    out = run_fixture_pipeline(tmp_path, monkeypatch, comparison)
+    validator = load_validator()
+    long_only_cfg = write_config(tmp_path / "long_only.yml", config, False)
+    short_cfg = write_config(tmp_path / "short.yml", config, True)
+    args = ["--outputs", str(out)]
+    assert validator.main(args + ["--config", str(short_cfg), "--require-current-run"]) == 0
+    # Config and run disagree: strict fails, otherwise the run's own setting is checked.
+    assert validator.main(args + ["--config", str(long_only_cfg), "--require-current-run"]) == 2
+    assert validator.main(args + ["--config", str(long_only_cfg)]) == 0
+    assert "allow_short=true" in capsys.readouterr().err
+    report = out / "report.json"
+    payload = json.loads(report.read_text(encoding="utf-8"))
+    payload["run"]["allow_short"] = False
+    report.write_text(json.dumps(payload), encoding="utf-8")
+    assert validator.main(args + ["--config", str(long_only_cfg)]) == 2
+    assert "long-only run produced short weights" in capsys.readouterr().err
+    # Outputs that predate the switch: warning only, unless the run must be current.
+    del payload["run"]["allow_short"]
+    report.write_text(json.dumps(payload), encoding="utf-8")
+    assert validator.main(args + ["--config", str(long_only_cfg)]) == 0
+    assert validator.main(args + ["--config", str(long_only_cfg), "--require-current-run"]) == 2
+    payload["run"]["allow_short"] = True
+    report.write_text(json.dumps(payload), encoding="utf-8")
+    metrics = pd.read_csv(out / "performance_metrics.csv").drop(columns=list(EXPOSURE_METRICS))
+    metrics.to_csv(out / "performance_metrics.csv", index=False)
+    assert validator.main(args + ["--config", str(short_cfg)]) == 0
+    assert validator.main(args + ["--config", str(short_cfg), "--require-current-run"]) == 2
+    assert "no exposure metrics" in capsys.readouterr().err
+
+
+def test_validator_accepts_committed_outputs_without_strict_mode():
+    assert load_validator().main([]) == 0
+
+
+def test_validator_default_matches_config_default():
+    from macro_allocation.config import DEFAULT_ALLOW_SHORT
+
+    assert DEFAULT_ALLOW_SHORT is False
+    assert load_validator().DEFAULT_ALLOW_SHORT is DEFAULT_ALLOW_SHORT

@@ -56,7 +56,7 @@ def validate_structure(config: dict[str, Any]) -> list[str]:
     if float(project.get("transaction_cost_bps", -1)) < 0:
         errors.append("transaction_cost_bps must be non-negative")
     if "allow_short" in project and not isinstance(project["allow_short"], bool):
-        errors.append("project.allow_short must be true (keep short positions) or false (long-only)")
+        errors.append("project.allow_short must be false (long-only, default) or true (original long/short, comparison only)")
     if data.get("provider") != "yahoo_chart_runtime":
         errors.append("only the declared yahoo_chart_runtime provider is allowed")
     provider_text = " ".join(str(value).lower() for value in data.values())
@@ -108,9 +108,17 @@ def validate_structure(config: dict[str, Any]) -> list[str]:
     return errors
 
 
+DEFAULT_ALLOW_SHORT = False
+
+
 def allow_short(config: dict[str, Any]) -> bool:
-    """Return ``project.allow_short``; a missing key keeps the original long/short behaviour."""
-    value = config["project"].get("allow_short", True)
+    """Return ``project.allow_short``.
+
+    The original research is long-only, so a missing key means ``False``: negative
+    positions are clipped to zero and the freed budget stays in cash.  ``True``
+    re-enables the original long/short implementation for comparison only.
+    """
+    value = config["project"].get("allow_short", DEFAULT_ALLOW_SHORT)
     if not isinstance(value, bool):
         raise ConfigurationError("project.allow_short must be a boolean")
     return value
