@@ -33,10 +33,10 @@ jobs:
       - name: Validate configuration without downloading data
         run: python run_replication.py --config config/base.yml --validate-config
 
-      # Every test uses fixtures committed under tests/ and never calls the
-      # Yahoo endpoint, so the whole suite is the offline subset; nothing is
-      # excluded. The real-data backtest stays in paper-replication.yml
-      # (manual workflow_dispatch only).
+      # Every test uses committed fixtures or deterministic data generated
+      # inside tests/ and never calls the Yahoo endpoint, so the whole suite is
+      # the offline subset; nothing is excluded. The real-data backtest stays
+      # in paper-replication.yml (manual workflow_dispatch only).
       - name: Run offline tests
         run: python -m pytest -q
 
