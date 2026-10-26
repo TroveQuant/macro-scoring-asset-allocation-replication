@@ -61,6 +61,7 @@ tests/test_production_metrics.py
 tests/test_production_reporting.py
 tests/test_production_pipeline.py
 tests/test_yahoo_provider.py
+tests/test_path_sanitizing.py
 tests/fixtures/lag_positions.csv
 tests/fixtures/lag_returns.csv
 tests/fixtures/duplicate_macro.csv

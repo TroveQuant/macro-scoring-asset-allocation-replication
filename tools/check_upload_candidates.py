@@ -19,6 +19,7 @@ PATTERNS = {
         r"(?i)(?<![a-z])(?:[a-z]:" + re.escape(WINDOWS_BACKSLASH) + r"|[a-z]:/)"
     ),
     "Unix home path": re.compile(r"/(?:home|Users)/[^/\s]+/"),
+    "enterprise sync folder path": re.compile(r"(?:企业微信|WeDrive|OneDrive)[\\/]"),
     "credential assignment": re.compile(
         r"(?i)(?:api[_-]?key|access[_-]?token|password|passwd|cookie|authorization)\s*[:=]\s*['\"]?[^\s'\"]+"
     ),
