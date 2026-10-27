@@ -58,27 +58,33 @@ python -m venv .venv
 
 ## 当前真实回测
 
-> **注意：`outputs/` 中的结果由修复前的代码生成（原始多空实现，相当于 `allow_short: true`），已过期，待在可访问数据源（Yahoo）的环境中通过正式入口重跑。**
->
-> - 第一轮：新增 `project.allow_short` 开关和敞口指标；现有 `outputs/performance_metrics.csv`、`report.json`、`report.html`、`backtest_report.md` 尚不包含敞口指标（`average_*_exposure`、`average_cash_weight`）和报告中的做空/可比性说明。
-> - 第二轮：所有者确认原研究为仅做多，默认改为 `allow_short: false`（负仓位截断为 0，释放的预算留在 BIL 现金）。这会改变收益、净值、回撤、权重、换手、成本等全部结果，因此现有收益与绩效数字都不再代表默认配置。
->
-> 下文敞口数字由已提交的 `outputs/allocation_weights.csv` 离线计算，描述的是这份旧输出（原始多空实现）。
+当前提交内结果由 `python run_replication.py --config config/base.yml` 在默认仅做多配置（`allow_short: false`）下基于 Yahoo Finance 真实调整价重新计算生成，并通过 `python tools/validate_backtest.py --require-current-run` 全部 12 项回测不变量、仅做多约束及敞口指标复核。回测区间为 `2018-01-31` 至 `2026-08-31`，共 104 个月：
 
-当前提交内结果来自修复前一次真实下载与重算（Actions run 35858166657，原始多空实现），区间 2018-01-31 至 2026-08-31，共 104 个月。在重跑之前，`outputs/performance_metrics.csv` 和自包含的 `outputs/report.html` 只反映这份旧结果。测试 fixture 只存在于 `tests/` 下（`tests/fixtures` 及离线流水线测试中生成的确定性价格，仅写入 pytest 临时目录），生产入口不会读取；测试通过不代表原模型严格复现成功。
+| 指标 | 策略 (`allow_short=false`) | 固定权重 Benchmark (100% 满仓) |
+| --- | --- | --- |
+| 累计收益率 (`cumulative_return`) | `38.58%` | `98.00%` |
+| 年化收益率 (`annualized_return`) | `3.84%` | `8.20%` |
+| 年化波动率 (`annualized_volatility`) | `3.16%` | — |
+| 夏普比率 (`sharpe_ratio`, `rf=0`) | `1.21` | — |
+| 最大回撤 (`max_drawdown`) | `-5.94%` | — |
+| 月度胜率 (`monthly_win_rate`) | `75.00%` | — |
+| 年化换手率 (`annualized_turnover`) | `1.65` | — |
+| 累计交易成本 (`total_transaction_cost`) | `1.43%` | — |
+| 平均净/总/多头风险敞口 | `22.46%` / `22.46%` / `22.46%` | `100.00%` |
+| 平均空头敞口 / 平均现金权重 (`BIL`) | `0.00%` / `77.54%` | `0.00%` / `0.00%` |
 
-**仅供参考、非提交结果**：在相同的已提交收益（`outputs/asset_returns.csv`）上，把已提交权重还原为仓位后以 `allow_short=false` 离线回放，年化收益约 3.84%（旧结果 1.31%）、年化波动约 3.16%（3.82%）、夏普约 1.21（0.34）、最大回撤约 -5.94%（-7.60%）、年化换手约 1.65（2.99），平均净敞口约 22.5%、平均现金约 77.5%；benchmark 年化 8.20% 不变。这些数字没有经过正式入口、也没有写入仓库；重跑会重新下载调整价，结果可能不同，以重跑后的 `outputs/` 为准。
+测试 fixture 只存在于 `tests/` 下（`tests/fixtures` 及离线流水线测试中生成的确定性价格，仅写入 pytest 临时目录），生产入口不会读取；测试通过不代表原模型严格复现成功。
 
 生成文件包括绩效、月收益、净值、权重、宏观得分、调仓记录、输入 manifest、三张图和三种报告格式，均在 `outputs/`。
 
 ## 仓位、敞口与 benchmark 可比性
 
 - 资产仓位范围为 [-1,1]，乘以原固定组合权重得到目标权重。原研究为仅做多，因此默认 `project.allow_short: false`（缺省该键时同样按 `false`）：负仓位截断为 0，释放的预算留在 BIL 现金。
-- `project.allow_short: true` 只用于与原始多空实现对照，不作为正式结果：负仓位即做空该资产（例如旧输出中 2018-01 黄金为 -30%），空头名义金额占用等额现金预算，卖空所得不计息，也未计融券费用。报告会标明“允许做空：是（原始多空实现，仅作对照）”。
+- `project.allow_short: true` 只用于与原始多空实现对照，不作为正式结果：负仓位即做空该资产（例如旧多空输出中 2018-01 黄金为 -30%），空头名义金额占用等额现金预算，卖空所得不计息，也未计融券费用。报告会标明“允许做空：是（原始多空实现，仅作对照）”。
 - 现金权重 `CASH = 1 - 风险资产权重绝对值之和`，由 BIL 代理。
-- 按已提交的旧 `outputs/allocation_weights.csv`（原始多空实现，2018-01 至 2026-08，104 个月）计算：平均净风险敞口 1.5%，平均总敞口 43.5%（多头 22.5%、空头 21.0%），平均现金 56.5%；约 99% 的月份至少持有一个空头。复核命令：`python tools/summarize_exposure.py`（它读取的是当前 `outputs/` 中的权重，重跑后会反映新默认）。
-- benchmark 是同六类资产按原权重 100% 满仓的多头组合（净敞口 100%，无现金）。即使仅做多，策略平均净敞口也明显低于 100%（上方参考回放约 22.5%），因此两者风险敞口不可比：策略相对 benchmark 的超额收益同时包含敞口差异（含现金拖累）和择时贡献，不能直接解读为宏观择时 alpha。比较时应同时参考敞口指标、波动率和夏普比率。
-- 新运行会把 `average_net_exposure`、`average_gross_exposure`、`average_long_exposure`、`average_short_exposure`、`average_cash_weight` 写入 `performance_metrics.csv` 和三种报告，并在 `report.json` 的 `run.allow_short` 记录本次设置；报告“方法与限制”会披露做空处理和上述可比性说明。`tools/validate_backtest.py` 按 `run.allow_short` 检查仅做多约束，并用权重文件独立复算敞口指标。
+- 按当前 `outputs/allocation_weights.csv`（默认仅做多 `allow_short=false`，2018-01 至 2026-08，104 个月）计算：平均净风险敞口 `22.46%`，平均总敞口 `22.46%`（多头 `22.46%`、空头 `0.00%`），平均现金 `77.54%`，持空月份占比 `0.00%`（原始多空实现对照下平均净敞口为 `1.5%`、总敞口 `43.5%`、现金 `56.5%`）。复核命令：`python tools/summarize_exposure.py`。
+- benchmark 是同六类资产按原权重 100% 满仓的多头组合（净敞口 100%，无现金）。即使仅做多，策略平均净敞口（`22.46%`）也明显低于 100%，因此两者风险敞口不可比：策略相对 benchmark 的超额收益同时包含敞口差异（含现金拖累）和择时贡献，不能直接解读为宏观择时 alpha。比较时应同时参考敞口指标、波动率和夏普比率。
+- `average_net_exposure`、`average_gross_exposure`、`average_long_exposure`、`average_short_exposure`、`average_cash_weight` 已写入 `performance_metrics.csv` 和三种报告，并在 `report.json` 的 `run.allow_short` 记录本次设置；报告“方法与限制”披露做空处理和上述可比性说明。`tools/validate_backtest.py` 按 `run.allow_short` 检查仅做多约束，并用权重文件独立复算敞口指标。
 
 ## GitHub Actions
 

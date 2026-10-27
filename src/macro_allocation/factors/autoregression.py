@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import inspect
+
 import numpy as np
 import pandas as pd
 from statsmodels.tsa.ar_model import AutoReg
 
 from ..errors import DataValidationError, ReproductionIncomplete
 from ..transforms import require_complete
+
+_AUTOREG_KWARGS: dict[str, object] = (
+    {"old_names": False} if "old_names" in inspect.signature(AutoReg).parameters else {}
+)
 
 
 def autoregressive_signal(
@@ -21,7 +27,7 @@ def autoregressive_signal(
     for end in range(initial_window, len(series) + 1):
         training = series.iloc[:end]
         try:
-            model = AutoReg(training, lags=lags, old_names=False).fit()
+            model = AutoReg(training, lags=lags, **_AUTOREG_KWARGS).fit()
             prediction = model.predict(start=len(training), end=len(training))
         except (ValueError, np.linalg.LinAlgError) as exc:
             raise ReproductionIncomplete(
