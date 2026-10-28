@@ -64,9 +64,11 @@ python -m venv .venv
 | --- | --- | --- |
 | 累计收益率 (`cumulative_return`) | `38.58%` | `98.00%` |
 | 年化收益率 (`annualized_return`) | `3.84%` | `8.20%` |
-| 年化波动率 (`annualized_volatility`) | `3.16%` | — |
-| 夏普比率 (`sharpe_ratio`, `rf=0`) | `1.21` | — |
-| 最大回撤 (`max_drawdown`) | `-5.94%` | — |
+| 年化波动率 (`annualized_volatility`) | `3.16%` | `7.83%` |
+| 夏普比率 (`sharpe_ratio`, `rf=0`) | `1.21` | `1.05` |
+| 索提诺比率 (`sortino_ratio`, `rf=0`) | `2.46` | `1.91` |
+| 最大回撤 (`max_drawdown`) | `-5.94%` | `-13.74%` |
+| 卡玛比率 (`calmar_ratio`) | `0.65` | `0.60` |
 | 月度胜率 (`monthly_win_rate`) | `75.00%` | — |
 | 年化换手率 (`annualized_turnover`) | `1.65` | — |
 | 累计交易成本 (`total_transaction_cost`) | `1.43%` | — |

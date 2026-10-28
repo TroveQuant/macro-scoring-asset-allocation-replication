@@ -62,7 +62,7 @@ def main(argv: list[str] | None = None) -> int:
     if not np.allclose(monthly.transaction_cost,expected_cost,atol=1e-12): return fail("transaction costs do not equal turnover times cost rate")
     recalc_nav=(1+monthly.strategy_return).cumprod()
     if not np.allclose(nav.strategy_nav,recalc_nav,atol=1e-12): return fail("strategy NAV cannot be independently compounded")
-    recalc_dd=recalc_nav/recalc_nav.cummax()-1
+    recalc_dd=recalc_nav/recalc_nav.cummax().clip(lower=1.0)-1
     if not np.isclose(float(metrics.max_drawdown),float(recalc_dd.min()),atol=1e-12): return fail("max drawdown cannot be independently reproduced")
     if not monthly.index.equals(nav.index) or not monthly.index.equals(weights.index) or not monthly.index.equals(assets.index): return fail("strategy and benchmark dates are not aligned")
     if monthly.index.max()>pd.Timestamp(cfg["data"]["as_of_date"]): return fail("latest result uses future return")

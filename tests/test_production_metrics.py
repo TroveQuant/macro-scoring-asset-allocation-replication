@@ -40,6 +40,16 @@ def test_backtest_metrics_include_exposure_and_require_aligned_dates():
     assert np.isclose(metrics["average_gross_exposure"], 0.5)
     assert np.isclose(metrics["average_short_exposure"], 0.5 / 3)
     assert np.isclose(metrics["average_cash_weight"], 0.5)
+    for key in (
+        "sortino_ratio",
+        "calmar_ratio",
+        "benchmark_annualized_volatility",
+        "benchmark_sharpe_ratio",
+        "benchmark_sortino_ratio",
+        "benchmark_max_drawdown",
+        "benchmark_calmar_ratio",
+    ):
+        assert key in metrics and np.isfinite(metrics[key])
     long_only = run_backtest(pos, ret, cash, {"CREDIT": 0.5}, 10, "2020-02-29")
     lo_metrics = compute_metrics(long_only.monthly, "2020-04-30", allocations=long_only.allocations)
     assert np.isclose(lo_metrics["average_net_exposure"], 1 / 3)
