@@ -13,7 +13,7 @@ run_replication.py
   → 月末对齐及因果滚动去极值/标准化
   → 国内、全球、风险、美元与 AR 信号
   → 原方向权重汇总为资产仓位
-  → 原组合权重 × 仓位
+  → 原组合权重 × 仓位（默认 allow_short=false 仅做多，负仓位截断为 0；true 为原始多空实现，仅作对照）
   → 信号后一期执行、显式 BIL 现金、10bp 换手成本
   → 同资产固定权重 benchmark
   → 指标、图表、JSON/HTML/Markdown 报告
@@ -49,19 +49,50 @@ python -m venv .venv
 .venv\Scripts\python.exe -m pip check
 .venv\Scripts\python.exe run_replication.py --config config/base.yml
 .venv\Scripts\python.exe tools/validate_backtest.py
+.venv\Scripts\python.exe tools/summarize_exposure.py
 ```
+
+`tools/summarize_exposure.py` 只读取 `outputs/allocation_weights.csv`，打印平均净/总/多头/空头敞口和平均现金，不下载数据、不改写输出。
 
 当前配置固定数据截止日为 2026-08-31，以确保本地与 Actions 得到相同月份范围。上游请求失败、数据陈旧、键不一致、重复日期、缺失收益或非有限结果都会返回非零退出码，且不会采用随机/演示/合成回退。
 
 ## 当前真实回测
 
-当前提交内结果来自本次真实下载与重算，区间 2018-01-31 至 2026-08-31，共 104 个月。主要指标以 `outputs/performance_metrics.csv` 和自包含的 `outputs/report.html` 为准。测试 fixture 只存在于 `tests/fixtures`；测试通过不代表原模型严格复现成功。
+当前提交内结果由 `python run_replication.py --config config/base.yml` 在默认仅做多配置（`allow_short: false`）下基于 Yahoo Finance 真实调整价重新计算生成，并通过 `python tools/validate_backtest.py --require-current-run` 全部 12 项回测不变量、仅做多约束及敞口指标复核。回测区间为 `2018-01-31` 至 `2026-08-31`，共 104 个月：
+
+| 指标 | 策略 (`allow_short=false`) | 固定权重 Benchmark (100% 满仓) |
+| --- | --- | --- |
+| 累计收益率 (`cumulative_return`) | `38.58%` | `98.00%` |
+| 年化收益率 (`annualized_return`) | `3.84%` | `8.20%` |
+| 年化波动率 (`annualized_volatility`) | `3.16%` | `7.83%` |
+| 夏普比率 (`sharpe_ratio`, `rf=0`) | `1.21` | `1.05` |
+| 索提诺比率 (`sortino_ratio`, `rf=0`) | `2.46` | `1.91` |
+| 最大回撤 (`max_drawdown`) | `-5.94%` | `-13.74%` |
+| 卡玛比率 (`calmar_ratio`) | `0.65` | `0.60` |
+| 月度胜率 (`monthly_win_rate`) | `75.00%` | — |
+| 年化换手率 (`annualized_turnover`) | `1.65` | — |
+| 累计交易成本 (`total_transaction_cost`) | `1.43%` | — |
+| 平均净/总/多头风险敞口 | `22.46%` / `22.46%` / `22.46%` | `100.00%` |
+| 平均空头敞口 / 平均现金权重 (`BIL`) | `0.00%` / `77.54%` | `0.00%` / `0.00%` |
+
+测试 fixture 只存在于 `tests/` 下（`tests/fixtures` 及离线流水线测试中生成的确定性价格，仅写入 pytest 临时目录），生产入口不会读取；测试通过不代表原模型严格复现成功。
 
 生成文件包括绩效、月收益、净值、权重、宏观得分、调仓记录、输入 manifest、三张图和三种报告格式，均在 `outputs/`。
 
+## 仓位、敞口与 benchmark 可比性
+
+- 资产仓位范围为 [-1,1]，乘以原固定组合权重得到目标权重。原研究为仅做多，因此默认 `project.allow_short: false`（缺省该键时同样按 `false`）：负仓位截断为 0，释放的预算留在 BIL 现金。
+- `project.allow_short: true` 只用于与原始多空实现对照，不作为正式结果：负仓位即做空该资产（例如旧多空输出中 2018-01 黄金为 -30%），空头名义金额占用等额现金预算，卖空所得不计息，也未计融券费用。报告会标明“允许做空：是（原始多空实现，仅作对照）”。
+- 现金权重 `CASH = 1 - 风险资产权重绝对值之和`，由 BIL 代理。
+- 按当前 `outputs/allocation_weights.csv`（默认仅做多 `allow_short=false`，2018-01 至 2026-08，104 个月）计算：平均净风险敞口 `22.46%`，平均总敞口 `22.46%`（多头 `22.46%`、空头 `0.00%`），平均现金 `77.54%`，持空月份占比 `0.00%`（原始多空实现对照下平均净敞口为 `1.5%`、总敞口 `43.5%`、现金 `56.5%`）。复核命令：`python tools/summarize_exposure.py`。
+- benchmark 是同六类资产按原权重 100% 满仓的多头组合（净敞口 100%，无现金）。即使仅做多，策略平均净敞口（`22.46%`）也明显低于 100%，因此两者风险敞口不可比：策略相对 benchmark 的超额收益同时包含敞口差异（含现金拖累）和择时贡献，不能直接解读为宏观择时 alpha。比较时应同时参考敞口指标、波动率和夏普比率。
+- `average_net_exposure`、`average_gross_exposure`、`average_long_exposure`、`average_short_exposure`、`average_cash_weight` 已写入 `performance_metrics.csv` 和三种报告，并在 `report.json` 的 `run.allow_short` 记录本次设置；报告“方法与限制”披露做空处理和上述可比性说明。`tools/validate_backtest.py` 按 `run.allow_short` 检查仅做多约束，并用权重文件独立复算敞口指标。
+
 ## GitHub Actions
 
-工作流 `Macro allocation replication` 仅支持 `workflow_dispatch`。选择 `run_replication=true` 后会安装固定依赖、运行结构及敏感信息检查和 pytest、删除批准的旧输出、下载真实数据、执行正式入口、复算 12 项回测不变量、验证报告、上传完整 Artifact，并只显式提交批准的输出；不使用 `continue-on-error`、schedule、Pages、邮件、虚构 Secret 或 `git add --all`。
+工作流 `Macro allocation replication` 仅支持 `workflow_dispatch`。选择 `run_replication=true` 后会安装固定依赖、运行结构及敏感信息检查和 pytest、删除批准的旧输出、下载真实数据、执行正式入口、复算 12 项回测不变量（`--require-current-run`：并要求敞口指标和 `run.allow_short` 存在且与配置一致、仅做多时无负权重）、验证报告、上传完整 Artifact，并只显式提交批准的输出；不使用 `continue-on-error`、schedule、Pages、邮件、虚构 Secret 或 `git add --all`。
+
+另有 `Tests` 工作流（`.github/workflows/tests.yml`），只在 pull request 和手动触发时运行：安装固定依赖、`pip check`、配置校验、全部离线 pytest 和上传白名单扫描。它只有 `contents: read` 权限，不下载行情、不使用 Secret、不提交任何文件。
 
 ## 复现限制与许可
 

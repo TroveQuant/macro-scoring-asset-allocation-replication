@@ -6,6 +6,7 @@ requirements.txt
 requirements-dev.txt
 run_replication.py
 .github/workflows/paper-replication.yml
+.github/workflows/tests.yml
 config/base.yml
 data/raw/README.md
 data/processed/.gitkeep
@@ -46,6 +47,7 @@ tools/check_upload_candidates.py
 tools/clean_outputs.py
 tools/inventory_local_data.py
 tools/validate_backtest.py
+tools/summarize_exposure.py
 tests/conftest.py
 tests/test_config.py
 tests/test_backtest.py
@@ -55,7 +57,11 @@ tests/test_environment.py
 tests/test_reporting.py
 tests/test_workflow.py
 tests/test_production_backtest.py
+tests/test_production_metrics.py
+tests/test_production_reporting.py
+tests/test_production_pipeline.py
 tests/test_yahoo_provider.py
+tests/test_path_sanitizing.py
 tests/fixtures/lag_positions.csv
 tests/fixtures/lag_returns.csv
 tests/fixtures/duplicate_macro.csv
